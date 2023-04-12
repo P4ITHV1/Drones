@@ -1,0 +1,90 @@
+from dronekit import connect, VehicleMode, LocationGlobalRelative
+import time, math
+import heapq
+
+# Define the graph
+waypoints = [
+    LocationGlobalRelative(37.6210, -122.3880, 20),
+    LocationGlobalRelative(37.6225, -122.3860, 20),
+    LocationGlobalRelative(37.6235, -122.3840, 20),
+    LocationGlobalRelative(37.6245, -122.3820, 20),
+    LocationGlobalRelative(37.6255, -122.3800, 20),
+    LocationGlobalRelative(37.6265, -122.3780, 20),
+    LocationGlobalRelative(37.6275, -122.3760, 20),
+    LocationGlobalRelative(37.6285, -122.3740, 20)
+]
+
+# Define the heuristic function
+def heuristic(node, goal):
+    dlat = goal.lat - node.lat
+    dlong = goal.lon - node.lon
+    return math.sqrt((dlat*dlat) + (dlong*dlong))
+
+# Define the A* algorithm
+def astar(graph, start, goal, heuristic):
+    frontier = []
+    heapq.heappush(frontier, (0, start))
+    came_from = {}
+    cost_so_far = {}
+    came_from[start] = None
+    cost_so_far[start] = 0
+
+    while frontier:
+        current = heapq.heappop(frontier)[1]
+
+        if current == goal:
+            break
+
+        for next_node in graph:
+            new_cost = cost_so_far[current] + heuristic(current, next_node)
+            if next_node not in cost_so_far or new_cost < cost_so_far[next_node]:
+                cost_so_far[next_node] = new_cost
+                priority = new_cost + heuristic(goal, next_node)
+                heapq.heappush(frontier, (priority, next_node))
+                came_from[next_node] = current
+
+    path = [goal]
+    while path[-1] != start:
+        path.append(came_from[path[-1]])
+    path.reverse()
+
+    return path
+
+# Connect to the vehicle
+vehicle = connect('udp:127.0.0.1:14550')
+
+# Prepare for takeoff
+vehicle.mode = VehicleMode("GUIDED")
+vehicle.armed = True
+vehicle.simple_takeoff(10)
+
+# Wait for the drone to reach the target altitude
+while True:
+    altitude = vehicle.location.global_relative_frame.alt
+    if altitude >= 9.5:
+        break
+    time.sleep(1)
+
+# Use A* algorithm to compute the path between waypoints
+graph = waypoints
+start = vehicle.location.global_relative_frame
+goal = waypoints[-1]
+path = astar(graph, start, goal, heuristic)
+
+# Fly the drone to each waypoint in the path
+for wp in path:
+    vehicle.simple_goto(wp)
+    while True:
+        if distance_to(vehicle.location.global_relative_frame, wp) <= 1.0:
+            print("Reached target location")
+            break
+        time.sleep(1)
+
+# Land the drone
+vehicle.mode = VehicleMode("LAND")
+
+# Close the connection to the vehicle
+vehicle.close()
+
+	
+		
