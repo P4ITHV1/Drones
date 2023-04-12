@@ -1,0 +1,82 @@
+from dronekit import connect, VehicleMode, LocationGlobalRelative
+import time, math, heapq
+
+vehicle = connect('udp:127.0.0.1:14550')
+
+# define a function to calculate the distance between two points
+def distance_to(self, other):
+    dlat = other.lat - self.lat
+    dlong = other.lon - self.lon
+    return math.sqrt((dlat*dlat) + (dlong*dlong)) * 1.113195e5
+
+# define a function to perform Dijkstra's algorithm
+def dijkstra(start, end, graph):
+    # initialize the distance and visited dictionaries
+    dist = {start: 0}
+    visited = {}
+    heap = [(0, start)]
+    while heap:
+        (d, u) = heapq.heappop(heap)
+        if u == end:
+            break
+        if u in visited:
+            continue
+        visited[u] = True
+        for v in graph[u]:
+            alt = dist[u] + distance_to(u, v)
+            if v not in dist or alt < dist[v]:
+                dist[v] = alt
+                heapq.heappush(heap, (alt, v))
+    path = []
+    u = end
+    while u != start:
+        path.append(u)
+        u = min(dist.keys(), key=lambda x: dist.get(x, float('inf')))
+        if u == end:
+            break
+        dist.pop(u, None)
+    path.append(start)
+    path.reverse()
+    return path
+
+# define the waypoints as a graph
+waypoints = {
+    LocationGlobalRelative(37.6210, -122.3880, 20): [LocationGlobalRelative(37.6225, -122.3860, 20)],
+    LocationGlobalRelative(37.6225, -122.3860, 20): [LocationGlobalRelative(37.6235, -122.3840, 20)],
+    LocationGlobalRelative(37.6235, -122.3840, 20): [LocationGlobalRelative(37.6245, -122.3820, 20)],
+    LocationGlobalRelative(37.6245, -122.3820, 20): [LocationGlobalRelative(37.6255, -122.3800, 20)],
+    LocationGlobalRelative(37.6255, -122.3800, 20): [LocationGlobalRelative(37.6265, -122.3780, 20)],
+    LocationGlobalRelative(37.6265, -122.3780, 20): [LocationGlobalRelative(37.6275, -122.3760, 20)],
+    LocationGlobalRelative(37.6275, -122.3760, 20): [LocationGlobalRelative(37.6285, -122.3740, 20)],
+    LocationGlobalRelative(37.6285, -122.3740, 20): []
+}
+
+# prep for liftoff
+vehicle.mode = VehicleMode("GUIDED")
+vehicle.armed = True
+vehicle.simple_takeoff(10)
+
+# let the drone cook
+while True:
+    altitude = vehicle.location.global_relative_frame.alt
+    if altitude >= 9.5:  # target altitude - 0.5 meters
+        break
+    time.sleep(1)
+
+# perform Dijkstra's algorithm to find the path between the waypoints
+start = LocationGlobalRelative(37.6210, -122.3880, 20)
+end = LocationGlobalRelative(37.6285, -122.3740, 20)
+path = dijstra(start, end, waypoints)
+
+for point in path:
+	print("Going to:", point)
+	vehicle.simple_goto(point)
+	while True:
+		remaining_distance = distance_to(vehicle.location.global_relative_frame, point)
+		if remaining_distance <= 0.5: # threshold distance
+		break
+	time.sleep(1)
+
+vehicle.mode = VehicleMode("LAND")
+
+Vehicle.close()
