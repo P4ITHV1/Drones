@@ -1,0 +1,58 @@
+from dronekit import connect, VehicleMode, LocationGlobalRelative
+import time, math, random
+
+class RRTNode:
+    def __init__(self, location):
+        self.location = location
+        self.parent = None
+
+class RRTTree:
+    def __init__(self, start):
+        self.vertices = [RRTNode(start)]
+    
+    def add_vertex(self, location, parent):
+        node = RRTNode(location)
+        node.parent = parent
+        self.vertices.append(node)
+
+    def get_nearest_node(self, location):
+        distances = [distance_to(v.location, location) for v in self.vertices]
+        min_dist = min(distances)
+        return self.vertices[distances.index(min_dist)]
+    
+    def generate_random_node(self, area):
+        min_lat, max_lat, min_lon, max_lon = area
+        lat = random.uniform(min_lat, max_lat)
+        lon = random.uniform(min_lon, max_lon)
+        return LocationGlobalRelative(lat, lon, 20)
+
+    def generate_path(self, goal_location):
+        path = []
+        node = self.vertices[-1]
+        while node.parent is not None:
+            path.append(node.location)
+            node = node.parent
+        path.append(node.location)
+        path.reverse()
+        path.append(goal_location)
+        return path
+
+def distance_to(self, other):
+    dlat = other.lat - self.lat
+    dlong = other.lon - self.lon
+    return math.sqrt((dlat*dlat) + (dlong*dlong)) * 1.113195e5
+
+def is_location_valid(location, obstacles):
+    for obs in obstacles:
+        if distance_to(location, obs) <= 2:
+            return False
+    return True
+
+def rrt(start, goal, area, obstacles, max_iter=100):
+    tree = RRTTree(start)
+    for i in range(max_iter):
+        rand_node = tree.generate_random_node(area)
+        nearest_node = tree.get_nearest_node(rand_node)
+        new_node_lat = nearest_node.location.lat + 0.1 * (rand_node.lat - nearest_node.location.lat)
+        new_node_lon = nearest_node.location.lon + 0.1 * (rand_node.lon - nearest_node.location.lon)
+        new_node = LocationGlobalRelative(new
