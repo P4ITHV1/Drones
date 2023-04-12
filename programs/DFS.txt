@@ -1,0 +1,73 @@
+from dronekit import connect, VehicleMode, LocationGlobalRelative
+import time, math
+
+vehicle = connect('udp:127.0.0.1:14550')
+
+# prep for liftoff
+vehicle.mode = VehicleMode("GUIDED")
+vehicle.armed = True
+vehicle.simple_takeoff(10)
+
+# let the drone cook
+while True:
+    altitude = vehicle.location.global_relative_frame.alt
+    if altitude >= 9.5:  # target altitude - 0.5 meters
+        break
+    time.sleep(1)
+
+# points to be crossed during flight
+waypoints = [
+    LocationGlobalRelative(37.6210, -122.3880, 20),
+    LocationGlobalRelative(37.6225, -122.3860, 20),
+    LocationGlobalRelative(37.6235, -122.3840, 20),
+    LocationGlobalRelative(37.6245, -122.3820, 20),
+    LocationGlobalRelative(37.6255, -122.3800, 20),
+    LocationGlobalRelative(37.6265, -122.3780, 20),
+    LocationGlobalRelative(37.6275, -122.3760, 20),
+    LocationGlobalRelative(37.6285, -122.3740, 20)
+]
+
+def distance_to(self, other):
+    dlat = other.lat - self.lat
+    dlong = other.lon - self.lon
+    return math.sqrt((dlat*dlat) + (dlong*dlong)) * 1.113195e5
+
+# define the DFS algorithm
+def dfs(graph, start, goal):
+    visited = set()
+    stack = [start]
+    while stack:
+        current = stack.pop()
+        if current == goal:
+            break
+        if current not in visited:
+            visited.add(current)
+            neighbors = graph[current]
+            for neighbor in neighbors:
+                if neighbor not in visited:
+                    stack.append(neighbor)
+    return visited
+
+# LETSGOOO
+graph = {wp: [] for wp in waypoints}
+for wp in waypoints:
+    for other_wp in waypoints:
+        if wp != other_wp and distance_to(wp, other_wp) <= 500:
+            graph[wp].append(other_wp)
+
+start = vehicle.location.global_relative_frame
+goal = waypoints[-1]
+path = dfs(graph, start, goal)
+
+for wp in path:
+    vehicle.simple_goto(wp)
+    while True:
+        if distance_to(vehicle.location.global_relative_frame, wp) <= 1.0:
+            print("Reached target location")
+            break
+        time.sleep(1)
+
+# land
+vehicle.mode = VehicleMode("LAND")
+
+vehicle.close()
